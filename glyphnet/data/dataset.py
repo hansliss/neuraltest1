@@ -9,7 +9,7 @@ from typing import Iterable, Sequence
 import numpy as np
 
 from ..config import DEFAULT_CONFIG, PRINTABLE_LATIN1
-from ..rendering import render_font_glyphs
+from ..rendering import GlyphRenderingError, render_font_glyphs
 from ..utils.characters import CharacterSet
 
 try:  # Optional dependency, falls back to plain range if unavailable
@@ -100,12 +100,28 @@ def build_dataset_from_fonts(
     else:
         iterator = font_paths
 
+    skipped_fonts: list[Path] = []
+
     for font_idx, font_path in enumerate(iterator):
-        glyphs = render_font_glyphs(font_path, char_set.chars, canvas_size=canvas, target_size=target)
+        try:
+            glyphs = render_font_glyphs(
+                font_path,
+                char_set.chars,
+                canvas_size=canvas,
+                target_size=target,
+            )
+        except (GlyphRenderingError, OSError) as exc:
+            skipped_fonts.append(font_path)
+            if show_progress and tqdm is not None:
+                tqdm.write(f"Skipping font {font_path} ({exc})")
+            continue
         for ch, bitmap in glyphs.items():
             images.append(bitmap.reshape(1, -1))
             labels.append(char_set.index_of(ch))
             font_indices.append(font_idx)
+
+    if skipped_fonts and (not show_progress or tqdm is None):
+        print(f"Skipped {len(skipped_fonts)} fonts due to rendering errors.")
 
     if not images:
         raise RuntimeError("No glyphs were rendered. Check font availability and character coverage.")
