@@ -1,3 +1,4 @@
 artifacts
 fonts
 venv
+__pycache__
